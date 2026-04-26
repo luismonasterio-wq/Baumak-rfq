@@ -378,8 +378,10 @@
     <h2>⚙ Configuración</h2>
     <div class="config-grid">
       <div class="field">
-        <label>Anthropic API Key</label>
-        <input type="password" id="cfg-api-key" placeholder="sk-ant-..." />
+        <div id="db-status2" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--paper);border:1.5px solid var(--border);font-size:12px;color:var(--muted);">
+          <span style="width:8px;height:8px;border-radius:50%;background:#2a7a4a;display:inline-block;"></span>
+          IA: Gemini 1.5 Flash (gratuito)
+        </div>
       </div>
       <div class="field" style="justify-content:flex-end;">
         <div id="db-status" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--paper);border:1.5px solid var(--border);font-size:12px;color:var(--muted);">
@@ -477,6 +479,7 @@
 // ──────────────────────────────────────────────
 // STATE
 // ──────────────────────────────────────────────
+const WORKER_URL = 'https://lucky-mode-8ff3.luis-monasterio.workers.dev';
 let gmailToken = null;
 let allQuotes = []; // [{supplier, items:[{desc,qty,unit,unitPrice,total}], deliveryDays, paymentTerms, rawText, source}]
 let manualFiles = [];
@@ -753,9 +756,6 @@ async function readFileContent(file) {
 // CLAUDE AI EXTRACTION
 // ──────────────────────────────────────────────
 async function extractAndAddQuote(content, supplier, source) {
-  const apiKey = cfg('cfg-api-key');
-  if (!apiKey) { toast('Ingresa tu Anthropic API Key en configuración.', true); return; }
-
   const isPdf = content.startsWith('PDF_BASE64:');
   const b64 = isPdf ? content.replace('PDF_BASE64:', '') : null;
 
@@ -790,32 +790,22 @@ Devuelve SOLO JSON con esta estructura exacta (sin explicaciones, sin markdown):
   "grandTotal": total_general_número
 }`;
 
-  let messages;
-  if (isPdf) {
-    messages = [{
-      role: 'user',
-      content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
-        { type: 'text', text: prompt }
-      ]
-    }];
-  } else {
-    messages = [{ role: 'user', content: `${prompt}\n\nCONTENIDO:\n${content.substring(0, 12000)}` }];
-  }
+  const fullPrompt = isPdf
+    ? prompt + '\n\n[Nota: archivo PDF — extrae lo que puedas]'
+    : prompt + '\n\nCONTENIDO:\n' + content.substring(0, 12000);
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, messages })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: fullPrompt })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(`API error ${res.status}: ${err.error?.message || res.statusText}`);
+      throw new Error(`Worker error ${res.status}: ${err.message || res.statusText}`);
     }
     const data = await res.json();
-    const text = data.content?.map(c => c.text || '').join('') || '';
-    // Extract JSON robustly - find first { ... } block
+    const text = data.text || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No se encontró JSON en la respuesta');
     const quote = JSON.parse(jsonMatch[0]);
@@ -947,8 +937,7 @@ async function renderCompare() {
 }
 
 async function getRecommendation() {
-  const apiKey = cfg('cfg-api-key');
-  if (!apiKey || allQuotes.length === 0) return null;
+  if (allQuotes.length === 0) return null;
   try {
     const summary = allQuotes.map(q => `
       Proveedor: ${q.supplier}
@@ -958,17 +947,15 @@ async function getRecommendation() {
       Descuento: ${q.discount || 0}%
       Notas: ${q.notes || 'ninguna'}
     `).join('\n---\n');
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: `Analiza estas cotizaciones y recomienda el mejor proveedor considerando precio, plazo, condiciones y notas. Sé conciso (máximo 4 oraciones). Explica por qué el elegido es la mejor opción total.\n\n${summary}` }]
+        prompt: `Analiza estas cotizaciones y recomienda el mejor proveedor considerando precio, plazo, condiciones y notas. Sé conciso (máximo 4 oraciones). Explica por qué el elegido es la mejor opción total.\n\n${summary}`
       })
     });
     const data = await res.json();
-    return data.content?.map(c => c.text || '').join('');
+    return data.text || null;
   } catch(e) { return null; }
 }
 
