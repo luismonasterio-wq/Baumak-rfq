@@ -373,7 +373,7 @@
   <!-- Config -->
   <input type="hidden" id="cfg-company" value="Baumak" />
   <input type="hidden" id="cfg-role" value="" />
-  <input type="hidden" id="cfg-client-id" value="" />
+  <input type="hidden" id="cfg-client-id" value="285666309890-ecv6dihaedkq5lllejm0jqhaokbsamf1.apps.googleusercontent.com" />
   <div class="config-panel">
     <h2>⚙ Configuración</h2>
     <div class="config-grid">
@@ -381,13 +381,15 @@
         <label>Anthropic API Key</label>
         <input type="password" id="cfg-api-key" placeholder="sk-ant-..." />
       </div>
-      <div class="field">
-        <label>Google Sheet ID (opcional)</label>
-        <input type="text" id="cfg-sheet-id" placeholder="ID del Sheet (entre /d/ y /edit en la URL)" />
+      <div class="field" style="justify-content:flex-end;">
+        <div id="db-status" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--paper);border:1.5px solid var(--border);font-size:12px;color:var(--muted);">
+          <span style="width:8px;height:8px;border-radius:50%;background:#2a7a4a;display:inline-block;"></span>
+          Base de datos: Supabase conectada
+        </div>
       </div>
     </div>
     <div class="config-note">
-      ¿No tienes credenciales? <a href="#" onclick="showSetupGuide(); return false;">Ver guía de configuración paso a paso →</a>
+      ¿No tienes tu API Key? <a href="https://console.anthropic.com" target="_blank">console.anthropic.com →</a>
     </div>
   </div>
 
@@ -516,7 +518,7 @@ function connectGmail() {
     if (!clientId) return;
     document.getElementById('cfg-client-id').value = clientId.trim();
   }
-  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/spreadsheets');
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly');
   const redirect = encodeURIComponent(window.location.href.split('?')[0]);
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=token&scope=${scope}`;
   window.open(url, '_blank', 'width=500,height=600');
@@ -820,6 +822,13 @@ Devuelve SOLO JSON con esta estructura exacta (sin explicaciones, sin markdown):
     quote.source = source;
     quote.rawText = isPdf ? '[PDF]' : content.substring(0, 500);
     allQuotes.push(quote);
+    // Auto-save to Supabase
+    try {
+      await saveQuoteToDb(quote);
+      quote._saved = true;
+    } catch(e) {
+      console.warn('No se pudo guardar en BD:', e.message);
+    }
   } catch(e) {
     toast('Error al extraer cotización: ' + e.message, true);
     console.error(e);
@@ -849,11 +858,12 @@ async function renderCompare() {
   const recommendation = await getRecommendation();
   hideLoader();
 
-  // Export to Sheets button
-  const sheetId = cfg('cfg-sheet-id');
-  const sheetsBar = sheetId
-    ? `<div class="sheets-link-bar">📊 <strong>Google Sheet vinculado.</strong>&nbsp;<a href="https://docs.google.com/spreadsheets/d/${sheetId}/edit" target="_blank">Abrir en Sheets →</a>&nbsp;·&nbsp;<a href="#" onclick="exportToSheets(); return false;">Exportar datos ahora →</a></div>`
-    : `<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Agrega un Sheet ID en configuración para exportar automáticamente.</div>`;
+  // Supabase save bar
+  const sheetsBar = `<div class="sheets-link-bar" style="background:#f0f9f4;border-color:#2a7a4a;">
+    🗄️ <strong>Base de datos Supabase activa.</strong>&nbsp;
+    <a href="#" onclick="exportToDb(); return false;">Guardar todas en BD →</a>&nbsp;·&nbsp;
+    <a href="#" onclick="loadHistoryFromDb(); return false;">Ver historial →</a>
+  </div>`;
 
   let html = `
     <div class="quotes-section">
@@ -963,32 +973,126 @@ async function getRecommendation() {
 }
 
 // ──────────────────────────────────────────────
-// GOOGLE SHEETS EXPORT
+// SUPABASE DATABASE
 // ──────────────────────────────────────────────
-async function exportToSheets() {
-  const sheetId = cfg('cfg-sheet-id');
-  if (!sheetId || !gmailToken) { toast('Necesitas Sheet ID y Gmail conectado para exportar.', true); return; }
-  showLoader('Exportando a Google Sheets...');
+const SUPABASE_URL = 'https://qjbkxowwbhxfcwwlgfeg.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_JgCF5OcA2-TDTsSXqvGSaQ_I734pSW8';
+
+async function sbFetch(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Prefer': method === 'POST' ? 'return=representation' : ''
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `DB error ${res.status}`);
+  }
+  return res.status === 204 ? null : await res.json();
+}
+
+async function saveQuoteToDb(quote) {
+  // Insert quote
+  const [saved] = await sbFetch('quotes', 'POST', {
+    supplier: quote.supplier,
+    source: quote.source,
+    quote_date: quote.quoteDate || null,
+    delivery_days: quote.deliveryDays || null,
+    payment_terms: quote.paymentTerms || null,
+    discount: quote.discount || 0,
+    grand_total: quote.grandTotal || 0,
+    notes: quote.notes || null,
+    currency: 'USD'
+  });
+  // Insert items
+  if (saved && quote.items?.length) {
+    const items = quote.items.map(item => ({
+      quote_id: saved.id,
+      description: item.description,
+      qty: item.qty,
+      unit: item.unit || '',
+      unit_price: item.unitPrice,
+      total: item.total
+    }));
+    await sbFetch('quote_items', 'POST', items);
+  }
+  return saved;
+}
+
+async function savePOToDb(po) {
+  return await sbFetch('purchase_orders', 'POST', {
+    po_number: po.poNumber,
+    quote_id: po.quoteId || null,
+    supplier: po.supplier,
+    grand_total: po.grandTotal,
+    status: 'pendiente'
+  });
+}
+
+async function loadQuotesFromDb() {
+  return await sbFetch('quotes?select=*,quote_items(*)&order=created_at.desc');
+}
+
+async function exportToDb() {
+  showLoader('Guardando en base de datos...');
   try {
-    // Prepare data
-    const headers = ['Proveedor', 'Ítem', 'Descripción', 'Cantidad', 'Unidad', 'Precio Unitario USD', 'Total Línea USD', 'Total General USD', 'Plazo (días)', 'Condiciones pago', 'Descuento %', 'Fuente'];
-    const rows = [headers];
-    allQuotes.forEach(q => {
-      q.items?.forEach((item, i) => {
-        rows.push([
-          q.supplier, i+1, item.description, item.qty, item.unit || '',
-          item.unitPrice, item.total, i === 0 ? q.grandTotal : '',
-          q.deliveryDays || '', q.paymentTerms || '', q.discount || 0, q.source
-        ]);
-      });
+    for (const quote of allQuotes) {
+      if (!quote._saved) {
+        await saveQuoteToDb(quote);
+        quote._saved = true;
+      }
+    }
+    toast('Guardado en Supabase ✓');
+  } catch(e) {
+    toast('Error al guardar: ' + e.message, true);
+  }
+  hideLoader();
+}
+
+// ──────────────────────────────────────────────
+// HISTORY FROM DB
+// ──────────────────────────────────────────────
+async function loadHistoryFromDb() {
+  showLoader('Cargando historial...');
+  try {
+    const data = await loadQuotesFromDb();
+    if (!data || data.length === 0) { toast('No hay cotizaciones guardadas aún.'); hideLoader(); return; }
+    // Merge into allQuotes avoiding duplicates
+    data.forEach(row => {
+      const exists = allQuotes.find(q => q._dbId === row.id);
+      if (!exists) {
+        allQuotes.push({
+          _dbId: row.id,
+          _saved: true,
+          supplier: row.supplier,
+          source: row.source,
+          quoteDate: row.quote_date,
+          deliveryDays: row.delivery_days,
+          paymentTerms: row.payment_terms,
+          discount: row.discount,
+          grandTotal: row.grand_total,
+          notes: row.notes,
+          items: (row.quote_items || []).map(i => ({
+            description: i.description,
+            qty: i.qty,
+            unit: i.unit,
+            unitPrice: i.unit_price,
+            total: i.total
+          }))
+        });
+      }
     });
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:append?valueInputOption=RAW`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${gmailToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: rows })
-    });
-    toast('Exportado a Google Sheets ✓');
-  } catch(e) { toast('Error al exportar: ' + e.message, true); }
+    toast(`${data.length} cotizaciones cargadas del historial ✓`);
+    renderCompare();
+  } catch(e) {
+    toast('Error al cargar historial: ' + e.message, true);
+  }
   hideLoader();
 }
 
@@ -1191,6 +1295,9 @@ function downloadPO(poNum) {
   doc.text('Firma de aceptación', W/2 + 2, y);
 
   doc.save(`OC-${q.supplier.replace(/\s+/g,'-')}-${poNum}.pdf`);
+  // Save PO to Supabase
+  savePOToDb({ poNumber: poNum, supplier: q.supplier, grandTotal: q.grandTotal, quoteId: q._dbId || null })
+    .catch(e => console.warn('No se pudo guardar OC en BD:', e));
   toast('PDF descargado ✓');
 }
 
@@ -1205,7 +1312,7 @@ function showSetupGuide() {
       <li>Crea un proyecto nuevo (botón "Nuevo proyecto" arriba a la izquierda)</li>
       <li>Ve a <strong>APIs y servicios → Biblioteca</strong> y activa:<br>
         · <em>Gmail API</em><br>
-        · <em>Google Sheets API</em></li>
+
       <li>Ve a <strong>APIs y servicios → Credenciales → Crear credenciales → ID de cliente OAuth 2.0</strong></li>
       <li>Tipo de aplicación: <strong>Aplicación web</strong></li>
       <li>En "Orígenes de JavaScript autorizados" agrega: <code style="background:var(--cream);padding:2px 6px;">${window.location.origin}</code></li>
@@ -1221,12 +1328,8 @@ function showSetupGuide() {
       <li>Copia la clave (empieza con <code style="background:var(--cream);padding:2px 6px;">sk-ant-</code>) y pégala en configuración</li>
     </ol>
 
-    <h3 style="font-family:var(--serif);font-size:18px;font-weight:400;margin:24px 0 16px;">3. Crear Google Sheet para exportar</h3>
-    <ol style="padding-left:20px;line-height:2;">
-      <li>Ve a <a href="https://sheets.google.com" target="_blank" style="color:var(--accent2);">sheets.google.com</a> y crea una hoja nueva</li>
-      <li>En la URL verás algo como: <code style="background:var(--cream);padding:2px 6px;">https://docs.google.com/spreadsheets/d/<strong>ID_AQUÍ</strong>/edit</code></li>
-      <li>Copia ese ID y pégalo en el campo "Google Sheet ID" de la configuración</li>
-    </ol>
+    <h3 style="font-family:var(--serif);font-size:18px;font-weight:400;margin:24px 0 16px;">3. Base de datos Supabase</h3>
+    <p style="line-height:2;">✓ Ya configurada. Tus cotizaciones se guardan automáticamente en PostgreSQL cada vez que procesas un correo o archivo.</p>
 
     <div style="background:var(--cream);padding:16px;margin-top:24px;font-size:12px;line-height:1.8;border-left:3px solid var(--accent);">
       <strong>Nota de seguridad:</strong> Esta app corre 100% en tu navegador. Tus credenciales nunca se envían a ningún servidor externo más que las APIs oficiales de Google y Anthropic.
