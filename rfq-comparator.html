@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RFQ Comparator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #1a1a18;
+    --paper: #f5f2eb;
+    --cream: #ede9df;
+    --accent: #c8622a;
+    --accent2: #2a6b8a;
+    --success: #2a7a4a;
+    --muted: #7a776e;
+    --border: #d4cfc4;
+    --mono: 'DM Mono', monospace;
+    --serif: 'Fraunces', Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--mono);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 2px solid var(--ink);
+    padding: 20px 40px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    background: var(--paper);
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 {
+    font-family: var(--serif);
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+  header span {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  /* ── Layout ── */
+  main { max-width: 1100px; margin: 0 auto; padding: 40px; }
+
+  /* ── Config Panel ── */
+  .config-panel {
+    border: 1.5px solid var(--border);
+    background: var(--cream);
+    padding: 28px 32px;
+    margin-bottom: 36px;
+  }
+  .config-panel h2 {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 400;
+    margin-bottom: 20px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 11px;
+  }
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .field input {
+    background: var(--paper);
+    border: 1.5px solid var(--border);
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .config-grid.wide { grid-template-columns: 1fr; }
+  .config-note {
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .config-note a { color: var(--accent2); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; border-bottom: 2px solid var(--ink); margin-bottom: 32px; gap: 0; }
+  .tab {
+    padding: 12px 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.15s;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+  .tab:hover:not(.active) { color: var(--ink); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 11px 22px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    border: 1.5px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--accent); border-color: var(--accent); }
+  .btn.outline { background: transparent; color: var(--ink); }
+  .btn.outline:hover { background: var(--ink); color: var(--paper); }
+  .btn.success { background: var(--success); border-color: var(--success); }
+  .btn.danger { background: var(--accent); border-color: var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Gmail connect ── */
+  .gmail-section {
+    border: 1.5px solid var(--border);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  .gmail-section h3 { font-family: var(--serif); font-size: 18px; font-weight: 300; margin-bottom: 8px; }
+  .gmail-section p { font-size: 12px; color: var(--muted); margin-bottom: 20px; line-height: 1.7; }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: 1px solid currentColor;
+    margin-bottom: 16px;
+  }
+  .status-pill.connected { color: var(--success); }
+  .status-pill.disconnected { color: var(--muted); }
+  .status-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ── Email list ── */
+  .email-list { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+  .email-card {
+    border: 1.5px solid var(--border);
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+  }
+  .email-card:hover { border-color: var(--accent); background: var(--cream); }
+  .email-card.selected { border-color: var(--accent); background: var(--cream); }
+  .email-card .sender { font-size: 13px; font-weight: 500; }
+  .email-card .subject { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .email-card .date { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .email-card .attach-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    margin-top: 4px;
+    display: inline-block;
+  }
+  .actions-bar { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+  /* ── Quotes table ── */
+  .quotes-section { margin-top: 32px; }
+  .quotes-section h3 {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 300;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--cream); }
+  .winner-row td { background: #e8f5ed; }
+  .winner-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--success);
+    color: white;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-left: 8px;
+  }
+  .price-cell { font-family: var(--mono); font-size: 13px; }
+  .best-price { color: var(--success); font-weight: 500; }
+
+  /* ── Recommendation box ── */
+  .recommendation {
+    border: 2px solid var(--success);
+    padding: 24px 28px;
+    margin-top: 28px;
+    background: #f0f9f4;
+  }
+  .recommendation h4 {
+    font-family: var(--serif);
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--success);
+    margin-bottom: 12px;
+  }
+  .recommendation p { font-size: 13px; line-height: 1.8; color: var(--ink); }
+
+  /* ── PO Section ── */
+  .po-section {
+    border: 1.5px solid var(--border);
+    padding: 28px 32px;
+    margin-top: 28px;
+    background: var(--cream);
+  }
+  .po-section h3 { font-family: var(--serif); font-size: 20px; font-weight: 300; margin-bottom: 20px; }
+  .po-preview {
+    background: white;
+    border: 1px solid var(--border);
+    padding: 40px;
+    font-size: 12px;
+    line-height: 1.8;
+    margin-bottom: 20px;
+  }
+  .po-preview h2 { font-family: var(--serif); font-size: 28px; font-weight: 300; color: var(--accent); margin-bottom: 4px; }
+  .po-preview .po-meta { color: var(--muted); font-size: 11px; margin-bottom: 24px; }
+  .po-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .po-grid .block h4 { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 6px; }
+  .po-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  .po-table th { background: var(--ink); color: var(--paper); padding: 8px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .po-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .po-total { text-align: right; font-size: 18px; font-family: var(--serif); }
+  .po-total strong { color: var(--accent); }
+
+  /* ── Loader / Toast ── */
+  .loader {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(245,242,235,0.85);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loader.visible { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-msg { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; }
+
+  .toast {
+    position: fixed; bottom: 32px; right: 32px;
+    padding: 14px 22px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12px;
+    font-family: var(--mono);
+    z-index: 1000;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s;
+    max-width: 320px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { background: var(--accent); }
+
+  /* ── Upload manual ── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 20px;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--cream); }
+  .upload-zone p { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .upload-zone .icon { font-size: 32px; }
+  .file-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .file-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    background: var(--ink); color: var(--paper);
+    font-size: 11px;
+  }
+  .file-chip button { background: none; border: none; color: var(--paper); cursor: pointer; font-size: 14px; line-height: 1; }
+  .supplier-field { margin-bottom: 12px; }
+  .supplier-field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; }
+  .supplier-field input { width: 100%; background: var(--paper); border: 1.5px solid var(--border); padding: 8px 12px; font-family: var(--mono); font-size: 13px; outline: none; }
+  .supplier-field input:focus { border-color: var(--accent); }
+
+  /* ── Sheets link ── */
+  .sheets-link-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    background: #e8f0fe;
+    border: 1px solid #4285f4;
+    margin-bottom: 20px;
+    font-size: 12px;
+  }
+  .sheets-link-bar a { color: #1a73e8; text-decoration: none; font-weight: 500; }
+  .sheets-link-bar a:hover { text-decoration: underline; }
+
+  /* empty state */
+  .empty-state { padding: 60px 0; text-align: center; color: var(--muted); }
+  .empty-state .big { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; }
+
+  @media (max-width: 700px) {
+    main { padding: 20px; }
+    header { padding: 16px 20px; }
+    .config-grid { grid-template-columns: 1fr; }
+    .po-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loader" id="loader">
+  <div class="spinner"></div>
+  <div class="loader-msg" id="loader-msg">Procesando...</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<header>
+  <h1>RFQ Comparator</h1>
+  <span>Cotizaciones · Comparación · Orden de compra</span>
+</header>
+
+<main>
+  <!-- Config -->
+  <input type="hidden" id="cfg-company" value="Baumak" />
+  <input type="hidden" id="cfg-role" value="" />
+  <input type="hidden" id="cfg-client-id" value="" />
+  <div class="config-panel">
+    <h2>⚙ Configuración</h2>
+    <div class="config-grid">
+      <div class="field">
+        <label>Anthropic API Key</label>
+        <input type="password" id="cfg-api-key" placeholder="sk-ant-..." />
+      </div>
+      <div class="field">
+        <label>Google Sheet ID (opcional)</label>
+        <input type="text" id="cfg-sheet-id" placeholder="ID del Sheet (entre /d/ y /edit en la URL)" />
+      </div>
+    </div>
+    <div class="config-note">
+      ¿No tienes credenciales? <a href="#" onclick="showSetupGuide(); return false;">Ver guía de configuración paso a paso →</a>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('gmail')">1 · Correos Gmail</button>
+    <button class="tab" onclick="switchTab('manual')">2 · Subir archivos</button>
+    <button class="tab" onclick="switchTab('compare')">3 · Comparar cotizaciones</button>
+    <button class="tab" onclick="switchTab('po')">4 · Orden de compra</button>
+  </div>
+
+  <!-- Tab: Gmail -->
+  <div class="tab-panel active" id="tab-gmail">
+    <div class="gmail-section">
+      <h3>Conectar Gmail</h3>
+      <p>La app leerá tus correos que tengan "RFQ" en el asunto y descargará adjuntos automáticamente.</p>
+      <div class="status-pill disconnected" id="gmail-status-pill">Desconectado</div>
+      <br>
+      <div class="actions-bar">
+        <button class="btn" id="btn-gmail-connect" onclick="connectGmail()">Conectar con Google</button>
+        <button class="btn outline" id="btn-gmail-fetch" onclick="fetchRfqEmails()" disabled>Buscar correos RFQ</button>
+      </div>
+    </div>
+    <div id="email-results"></div>
+  </div>
+
+  <!-- Tab: Manual upload -->
+  <div class="tab-panel" id="tab-manual">
+    <div class="gmail-section">
+      <h3>Subir cotizaciones manualmente</h3>
+      <p>Si no usas Gmail o quieres subir archivos directamente. Acepta PDF, Excel (.xlsx), Word (.docx) y texto.</p>
+
+      <div class="supplier-field">
+        <label>Nombre del proveedor</label>
+        <input type="text" id="manual-supplier" placeholder="Ej: Proveedora Monterrey SA" />
+      </div>
+
+      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+        ondragover="event.preventDefault(); this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleDrop(event)">
+        <div class="icon">📄</div>
+        <strong>Arrastra archivos aquí o haz clic</strong>
+        <p>PDF, Excel, Word o texto plano</p>
+      </div>
+      <input type="file" id="file-input" multiple accept=".pdf,.xlsx,.xls,.docx,.doc,.txt,.csv" style="display:none" onchange="handleFileSelect(this.files)">
+
+      <div class="file-chips" id="file-chips"></div>
+      <button class="btn" onclick="processManualFiles()">Extraer cotización con IA →</button>
+    </div>
+  </div>
+
+  <!-- Tab: Compare -->
+  <div class="tab-panel" id="tab-compare">
+    <div id="compare-content">
+      <div class="empty-state">
+        <div class="big">📊</div>
+        <p>Aún no hay cotizaciones procesadas</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: PO -->
+  <div class="tab-panel" id="tab-po">
+    <div id="po-content">
+      <div class="empty-state">
+        <div class="big">📋</div>
+        <p>Selecciona un proveedor en la comparación primero</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Setup guide modal -->
+<div id="setup-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; overflow-y:auto;">
+  <div style="max-width:680px; margin:40px auto; background:var(--paper); padding:40px; position:relative;">
+    <button onclick="document.getElementById('setup-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:20px;cursor:pointer;">✕</button>
+    <h2 style="font-family:var(--serif);font-size:24px;font-weight:300;margin-bottom:24px;">Guía de configuración</h2>
+    <div style="font-size:13px;line-height:1.9;color:var(--ink);" id="setup-guide-content"></div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────
+let gmailToken = null;
+let allQuotes = []; // [{supplier, items:[{desc,qty,unit,unitPrice,total}], deliveryDays, paymentTerms, rawText, source}]
+let manualFiles = [];
+let selectedSupplier = null;
+
+// ──────────────────────────────────────────────
+// UTILS
+// ──────────────────────────────────────────────
+function showLoader(msg = 'Procesando...') {
+  document.getElementById('loader-msg').textContent = msg;
+  document.getElementById('loader').classList.add('visible');
+}
+function hideLoader() { document.getElementById('loader').classList.remove('visible'); }
+
+function toast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const tabs = ['gmail','manual','compare','po'];
+  document.querySelectorAll('.tab')[tabs.indexOf(name)].classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function cfg(id) { return document.getElementById(id).value.trim(); }
+
+// ──────────────────────────────────────────────
+// GOOGLE OAUTH (Gmail)
+// ──────────────────────────────────────────────
+function connectGmail() {
+  let clientId = cfg('cfg-client-id');
+  if (!clientId) {
+    clientId = prompt('Pega tu Google Client ID (termina en .apps.googleusercontent.com):');
+    if (!clientId) return;
+    document.getElementById('cfg-client-id').value = clientId.trim();
+  }
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/spreadsheets');
+  const redirect = encodeURIComponent(window.location.href.split('?')[0]);
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=token&scope=${scope}`;
+  window.open(url, '_blank', 'width=500,height=600');
+  // Listen for token from popup (simple polling)
+  window._gmailAuthCallback = (token) => {
+    gmailToken = token;
+    document.getElementById('gmail-status-pill').textContent = 'Conectado';
+    document.getElementById('gmail-status-pill').className = 'status-pill connected';
+    document.getElementById('btn-gmail-fetch').disabled = false;
+    toast('Gmail conectado ✓');
+  };
+}
+
+// Handle OAuth redirect token in URL hash
+(function() {
+  const hash = window.location.hash;
+  if (hash.includes('access_token')) {
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get('access_token');
+    if (token && window.opener && window.opener._gmailAuthCallback) {
+      window.opener._gmailAuthCallback(token);
+      window.close();
+    }
+  }
+})();
+
+async function fetchRfqEmails() {
+  if (!gmailToken) { toast('Conecta Gmail primero.', true); return; }
+  showLoader('Buscando correos RFQ...');
+  try {
+    const query = encodeURIComponent('subject:rfq OR subject:RFQ OR subject:cotizacion OR subject:cotización');
+    const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=20`, {
+      headers: { Authorization: `Bearer ${gmailToken}` }
+    });
+    const data = await res.json();
+    if (!data.messages || data.messages.length === 0) {
+      document.getElementById('email-results').innerHTML = '<div class="empty-state"><p>No se encontraron correos con "RFQ" en el asunto.</p></div>';
+      hideLoader(); return;
+    }
+    // Fetch details for each
+    const emails = await Promise.all(data.messages.slice(0, 15).map(m => fetchEmailDetail(m.id)));
+    renderEmailList(emails.filter(Boolean));
+  } catch(e) {
+    toast('Error al leer Gmail: ' + e.message, true);
+  }
+  hideLoader();
+}
+
+async function fetchEmailDetail(id) {
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
+    headers: { Authorization: `Bearer ${gmailToken}` }
+  });
+  const msg = await res.json();
+  const headers = msg.payload?.headers || [];
+  const get = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+  const attachments = [];
+  function walkParts(parts) {
+    if (!parts) return;
+    for (const part of parts) {
+      if (part.filename && part.body?.attachmentId) {
+        attachments.push({ name: part.filename, id: part.body.attachmentId, mimeType: part.mimeType });
+      }
+      if (part.parts) walkParts(part.parts);
+    }
+  }
+  walkParts(msg.payload?.parts);
+  let body = '';
+  function extractBody(parts) {
+    if (!parts) return;
+    for (const part of parts) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        body += atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+      }
+      if (part.parts) extractBody(part.parts);
+    }
+  }
+  extractBody(msg.payload?.parts);
+  if (!body && msg.payload?.body?.data) {
+    body = atob(msg.payload.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+  }
+  return { id, subject: get('Subject'), from: get('From'), date: get('Date'), body, attachments, raw: msg };
+}
+
+function renderEmailList(emails) {
+  const container = document.getElementById('email-results');
+  container.innerHTML = `<div class="email-list" id="email-list"></div>
+    <div class="actions-bar" style="margin-top:16px;">
+      <button class="btn" onclick="processSelectedEmails()">Extraer cotizaciones seleccionadas →</button>
+    </div>`;
+  const list = document.getElementById('email-list');
+  emails.forEach((email, i) => {
+    const div = document.createElement('div');
+    div.className = 'email-card';
+    div.dataset.idx = i;
+    div.onclick = () => div.classList.toggle('selected');
+    const attachBadge = email.attachments.length > 0
+      ? `<span class="attach-badge">📎 ${email.attachments.length} adjunto(s): ${email.attachments.map(a=>a.name).join(', ')}</span>`
+      : '';
+    div.innerHTML = `
+      <div>
+        <div class="sender">${email.from}</div>
+        <div class="subject">${email.subject}</div>
+        ${attachBadge}
+      </div>
+      <div class="date">${new Date(email.date).toLocaleDateString('es-MX')}</div>
+    `;
+    div._email = email;
+    list.appendChild(div);
+  });
+  window._emailList = emails;
+}
+
+async function processSelectedEmails() {
+  const selected = [...document.querySelectorAll('.email-card.selected')].map(c => window._emailList[parseInt(c.dataset.idx)]);
+  if (selected.length === 0) { toast('Selecciona al menos un correo.', true); return; }
+  for (const email of selected) {
+    showLoader(`Procesando: ${email.from}...`);
+    let content = email.body;
+    // Try to get attachment content
+    for (const att of email.attachments) {
+      if (!att.id) continue;
+      const attRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${email.id}/attachments/${att.id}`, {
+        headers: { Authorization: `Bearer ${gmailToken}` }
+      });
+      const attData = await attRes.json();
+      const b64 = attData.data?.replace(/-/g,'+').replace(/_/g,'/');
+      if (b64) {
+        // For now, pass as base64 note; Claude will handle PDF/Excel in API call
+        content += `\n\n[ADJUNTO: ${att.name}]\n(base64 disponible para extracción)`;
+      }
+    }
+    const supplier = email.from.replace(/<.*>/, '').trim();
+    await extractAndAddQuote(content, supplier, `Gmail: ${email.subject}`);
+  }
+  hideLoader();
+  toast(`${selected.length} cotización(es) procesada(s) ✓`);
+  switchTab('compare');
+  renderCompare();
+}
+
+// ──────────────────────────────────────────────
+// MANUAL FILE UPLOAD
+// ──────────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  handleFileSelect(e.dataTransfer.files);
+}
+
+function handleFileSelect(files) {
+  for (const f of files) manualFiles.push(f);
+  renderFileChips();
+}
+
+function renderFileChips() {
+  const container = document.getElementById('file-chips');
+  container.innerHTML = '';
+  manualFiles.forEach((f, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    chip.innerHTML = `${f.name} <button onclick="removeFile(${i})">×</button>`;
+    container.appendChild(chip);
+  });
+}
+
+function removeFile(i) {
+  manualFiles.splice(i, 1);
+  renderFileChips();
+}
+
+async function processManualFiles() {
+  if (manualFiles.length === 0) { toast('Agrega al menos un archivo.', true); return; }
+  const supplier = document.getElementById('manual-supplier').value.trim() || 'Proveedor sin nombre';
+  showLoader('Extrayendo datos de archivos...');
+  for (const file of manualFiles) {
+    const content = await readFileContent(file);
+    await extractAndAddQuote(content, supplier, `Archivo: ${file.name}`);
+  }
+  manualFiles = [];
+  renderFileChips();
+  document.getElementById('manual-supplier').value = '';
+  hideLoader();
+  toast('Cotización procesada ✓');
+  switchTab('compare');
+  renderCompare();
+}
+
+async function readFileContent(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'txt' || ext === 'csv') {
+    return await file.text();
+  }
+  if (ext === 'xlsx' || ext === 'xls') {
+    return await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        let text = '';
+        wb.SheetNames.forEach(name => {
+          text += `Hoja: ${name}\n`;
+          text += XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+          text += '\n\n';
+        });
+        resolve(text);
+      };
+      reader.readAsBinaryString(file);
+    });
+  }
+  if (ext === 'docx' || ext === 'doc') {
+    return await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        mammoth.extractRawText({ arrayBuffer: e.target.result })
+          .then(r => resolve(r.value))
+          .catch(() => resolve('No se pudo leer el Word.'));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+  if (ext === 'pdf') {
+    // For PDF, send as base64 to Claude with vision/document
+    return await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve('PDF_BASE64:' + e.target.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+  }
+  return await file.text();
+}
+
+// ──────────────────────────────────────────────
+// CLAUDE AI EXTRACTION
+// ──────────────────────────────────────────────
+async function extractAndAddQuote(content, supplier, source) {
+  const apiKey = cfg('cfg-api-key');
+  if (!apiKey) { toast('Ingresa tu Anthropic API Key en configuración.', true); return; }
+
+  const isPdf = content.startsWith('PDF_BASE64:');
+  const b64 = isPdf ? content.replace('PDF_BASE64:', '') : null;
+
+  const prompt = `Analiza esta cotización y extrae los datos en formato JSON.
+Proveedor: ${supplier}
+Fuente: ${source}
+
+INSTRUCCIONES:
+- Extrae TODOS los productos/servicios cotizados
+- Detecta precios unitarios, cantidades y totales
+- Detecta plazo de entrega, condiciones de pago, descuentos, notas
+- Si hay descuentos, aplícalos al total
+- Moneda asumida: USD
+
+Devuelve SOLO JSON con esta estructura exacta (sin explicaciones, sin markdown):
+{
+  "supplier": "nombre del proveedor",
+  "quoteDate": "fecha si está disponible o null",
+  "deliveryDays": número o null,
+  "paymentTerms": "condiciones de pago como texto o null",
+  "discount": porcentaje_descuento_número o 0,
+  "notes": "notas importantes o null",
+  "items": [
+    {
+      "description": "descripción del producto",
+      "qty": cantidad_número,
+      "unit": "unidad (pza, kg, lt, etc)",
+      "unitPrice": precio_unitario_número,
+      "total": total_línea_número
+    }
+  ],
+  "grandTotal": total_general_número
+}`;
+
+  let messages;
+  if (isPdf) {
+    messages = [{
+      role: 'user',
+      content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
+        { type: 'text', text: prompt }
+      ]
+    }];
+  } else {
+    messages = [{ role: 'user', content: `${prompt}\n\nCONTENIDO:\n${content.substring(0, 12000)}` }];
+  }
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, messages })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`API error ${res.status}: ${err.error?.message || res.statusText}`);
+    }
+    const data = await res.json();
+    const text = data.content?.map(c => c.text || '').join('') || '';
+    // Extract JSON robustly - find first { ... } block
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No se encontró JSON en la respuesta');
+    const quote = JSON.parse(jsonMatch[0]);
+    quote.source = source;
+    quote.rawText = isPdf ? '[PDF]' : content.substring(0, 500);
+    allQuotes.push(quote);
+  } catch(e) {
+    toast('Error al extraer cotización: ' + e.message, true);
+    console.error(e);
+  }
+}
+
+// ──────────────────────────────────────────────
+// COMPARE VIEW
+// ──────────────────────────────────────────────
+async function renderCompare() {
+  const container = document.getElementById('compare-content');
+  if (allQuotes.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="big">📊</div><p>Aún no hay cotizaciones procesadas</p></div>';
+    return;
+  }
+
+  // Find best price per item
+  const allItems = new Set();
+  allQuotes.forEach(q => q.items?.forEach(item => allItems.add(item.description)));
+
+  // Best grand total
+  const minTotal = Math.min(...allQuotes.map(q => q.grandTotal || Infinity));
+  const winner = allQuotes.find(q => q.grandTotal === minTotal);
+
+  // Get AI recommendation
+  showLoader('Generando recomendación con IA...');
+  const recommendation = await getRecommendation();
+  hideLoader();
+
+  // Export to Sheets button
+  const sheetId = cfg('cfg-sheet-id');
+  const sheetsBar = sheetId
+    ? `<div class="sheets-link-bar">📊 <strong>Google Sheet vinculado.</strong>&nbsp;<a href="https://docs.google.com/spreadsheets/d/${sheetId}/edit" target="_blank">Abrir en Sheets →</a>&nbsp;·&nbsp;<a href="#" onclick="exportToSheets(); return false;">Exportar datos ahora →</a></div>`
+    : `<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Agrega un Sheet ID en configuración para exportar automáticamente.</div>`;
+
+  let html = `
+    <div class="quotes-section">
+      <h3>Comparación de cotizaciones (${allQuotes.length} proveedores)</h3>
+      ${sheetsBar}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th>Ítems</th>
+              <th>Plazo entrega</th>
+              <th>Condiciones pago</th>
+              <th>Descuento</th>
+              <th>Total USD</th>
+              <th>Fuente</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+  allQuotes.forEach((q, i) => {
+    const isWinner = q === winner;
+    html += `<tr class="${isWinner ? 'winner-row' : ''}">
+      <td><strong>${q.supplier}</strong>${isWinner ? '<span class="winner-badge">Mejor precio</span>' : ''}</td>
+      <td>${q.items?.length || 0}</td>
+      <td>${q.deliveryDays ? q.deliveryDays + ' días' : '—'}</td>
+      <td>${q.paymentTerms || '—'}</td>
+      <td>${q.discount ? q.discount + '%' : '0%'}</td>
+      <td class="price-cell ${isWinner ? 'best-price' : ''}">$${(q.grandTotal || 0).toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+      <td style="font-size:11px;color:var(--muted);">${q.source}</td>
+      <td><button class="btn outline" style="padding:6px 12px;font-size:10px;" onclick="selectSupplierForPO(${i})">Seleccionar →</button></td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+
+  // Items breakdown
+  html += `<div style="margin-top:28px;">
+    <h3 style="font-family:var(--serif);font-size:18px;font-weight:300;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">Detalle por ítems</h3>
+    <div class="table-wrap"><table><thead><tr><th>Descripción</th>`;
+  allQuotes.forEach(q => html += `<th>${q.supplier}</th>`);
+  html += `</tr></thead><tbody>`;
+
+  const itemMap = {};
+  allQuotes.forEach((q, qi) => {
+    q.items?.forEach(item => {
+      if (!itemMap[item.description]) itemMap[item.description] = {};
+      itemMap[item.description][qi] = item;
+    });
+  });
+
+  Object.entries(itemMap).forEach(([desc, bySupplier]) => {
+    const prices = Object.values(bySupplier).map(i => i.unitPrice).filter(Boolean);
+    const minPrice = Math.min(...prices);
+    html += `<tr><td>${desc}</td>`;
+    allQuotes.forEach((q, qi) => {
+      const item = bySupplier[qi];
+      if (item) {
+        const isBest = item.unitPrice === minPrice && prices.length > 1;
+        html += `<td class="price-cell ${isBest ? 'best-price' : ''}">$${item.unitPrice?.toLocaleString('en-US',{minimumFractionDigits:2})} × ${item.qty} ${item.unit || ''}<br><small>= $${item.total?.toLocaleString('en-US',{minimumFractionDigits:2})}</small></td>`;
+      } else {
+        html += `<td style="color:var(--muted);">—</td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table></div></div>`;
+
+  // Recommendation
+  if (recommendation) {
+    html += `<div class="recommendation">
+      <h4>✓ Recomendación de IA</h4>
+      <p>${recommendation}</p>
+    </div>`;
+  }
+
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+async function getRecommendation() {
+  const apiKey = cfg('cfg-api-key');
+  if (!apiKey || allQuotes.length === 0) return null;
+  try {
+    const summary = allQuotes.map(q => `
+      Proveedor: ${q.supplier}
+      Total: $${q.grandTotal} USD
+      Plazo: ${q.deliveryDays || 'N/D'} días
+      Pago: ${q.paymentTerms || 'N/D'}
+      Descuento: ${q.discount || 0}%
+      Notas: ${q.notes || 'ninguna'}
+    `).join('\n---\n');
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: `Analiza estas cotizaciones y recomienda el mejor proveedor considerando precio, plazo, condiciones y notas. Sé conciso (máximo 4 oraciones). Explica por qué el elegido es la mejor opción total.\n\n${summary}` }]
+      })
+    });
+    const data = await res.json();
+    return data.content?.map(c => c.text || '').join('');
+  } catch(e) { return null; }
+}
+
+// ──────────────────────────────────────────────
+// GOOGLE SHEETS EXPORT
+// ──────────────────────────────────────────────
+async function exportToSheets() {
+  const sheetId = cfg('cfg-sheet-id');
+  if (!sheetId || !gmailToken) { toast('Necesitas Sheet ID y Gmail conectado para exportar.', true); return; }
+  showLoader('Exportando a Google Sheets...');
+  try {
+    // Prepare data
+    const headers = ['Proveedor', 'Ítem', 'Descripción', 'Cantidad', 'Unidad', 'Precio Unitario USD', 'Total Línea USD', 'Total General USD', 'Plazo (días)', 'Condiciones pago', 'Descuento %', 'Fuente'];
+    const rows = [headers];
+    allQuotes.forEach(q => {
+      q.items?.forEach((item, i) => {
+        rows.push([
+          q.supplier, i+1, item.description, item.qty, item.unit || '',
+          item.unitPrice, item.total, i === 0 ? q.grandTotal : '',
+          q.deliveryDays || '', q.paymentTerms || '', q.discount || 0, q.source
+        ]);
+      });
+    });
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:append?valueInputOption=RAW`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${gmailToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows })
+    });
+    toast('Exportado a Google Sheets ✓');
+  } catch(e) { toast('Error al exportar: ' + e.message, true); }
+  hideLoader();
+}
+
+// ──────────────────────────────────────────────
+// PURCHASE ORDER
+// ──────────────────────────────────────────────
+function selectSupplierForPO(idx) {
+  selectedSupplier = allQuotes[idx];
+  switchTab('po');
+  renderPO();
+}
+
+function renderPO() {
+  if (!selectedSupplier) return;
+  const q = selectedSupplier;
+  const company = cfg('cfg-company') || 'Tu empresa';
+  const role = cfg('cfg-role') || '';
+  const today = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+  const poNum = 'PO-' + Date.now().toString().slice(-6);
+
+  const itemsHTML = q.items?.map((item, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${item.description}</td>
+      <td>${item.qty} ${item.unit || ''}</td>
+      <td>$${item.unitPrice?.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>$${item.total?.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+    </tr>
+  `).join('') || '';
+
+  document.getElementById('po-content').innerHTML = `
+    <div class="po-section">
+      <h3>Orden de Compra — Lista para enviar</h3>
+      <div class="po-preview" id="po-preview">
+        <h2>ORDEN DE COMPRA</h2>
+        <div class="po-meta">${poNum} · ${today}</div>
+        <div class="po-grid">
+          <div class="block">
+            <h4>Comprador</h4>
+            <div><strong>${company}</strong></div>
+            <div>${role}</div>
+          </div>
+          <div class="block">
+            <h4>Proveedor</h4>
+            <div><strong>${q.supplier}</strong></div>
+            <div style="font-size:11px;color:var(--muted);">Fuente: ${q.source}</div>
+          </div>
+        </div>
+        <table class="po-table">
+          <thead>
+            <tr><th>#</th><th>Descripción</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr>
+          </thead>
+          <tbody>${itemsHTML}</tbody>
+        </table>
+        ${q.discount ? `<div style="text-align:right;font-size:12px;color:var(--muted);margin-bottom:8px;">Descuento aplicado: ${q.discount}%</div>` : ''}
+        <div class="po-total">Total general: <strong>$${(q.grandTotal || 0).toLocaleString('en-US',{minimumFractionDigits:2})} USD</strong></div>
+        <div style="margin-top:24px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:16px;">
+          <strong>Plazo de entrega:</strong> ${q.deliveryDays ? q.deliveryDays + ' días hábiles' : 'A convenir'} &nbsp;·&nbsp;
+          <strong>Condiciones de pago:</strong> ${q.paymentTerms || 'A convenir'}
+          ${q.notes ? `<br><strong>Notas:</strong> ${q.notes}` : ''}
+        </div>
+        <div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:12px;">
+          <div>
+            <div style="border-top:1px solid var(--ink);padding-top:8px;margin-top:40px;">${company}</div>
+            <div style="color:var(--muted);">${role}</div>
+          </div>
+          <div>
+            <div style="border-top:1px solid var(--ink);padding-top:8px;margin-top:40px;">Firma de aceptación</div>
+            <div style="color:var(--muted);">${q.supplier}</div>
+          </div>
+        </div>
+      </div>
+      <div class="actions-bar">
+        <button class="btn success" onclick="downloadPO('${poNum}')">⬇ Descargar PDF</button>
+        <button class="btn outline" onclick="switchTab('compare')">← Volver a comparación</button>
+      </div>
+    </div>`;
+}
+
+function downloadPO(poNum) {
+  const { jsPDF } = window.jspdf;
+  const q = selectedSupplier;
+  const company = cfg('cfg-company') || 'Tu empresa';
+  const role = cfg('cfg-role') || '';
+  const today = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+
+  const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+  const W = 216, margin = 20;
+  let y = 20;
+
+  // Header
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(200, 98, 42);
+  doc.text('ORDEN DE COMPRA', margin, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 119, 110);
+  doc.text(`${poNum}  ·  ${today}`, margin, y);
+  y += 10;
+
+  // Divider
+  doc.setDrawColor(200, 98, 42);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, W - margin, y);
+  y += 8;
+
+  // Parties
+  doc.setFontSize(8);
+  doc.setTextColor(120, 119, 110);
+  doc.text('COMPRADOR', margin, y);
+  doc.text('PROVEEDOR', W / 2 + 2, y);
+  y += 5;
+  doc.setFontSize(11);
+  doc.setTextColor(26, 26, 24);
+  doc.setFont('helvetica', 'bold');
+  doc.text(company, margin, y);
+  doc.text(q.supplier, W / 2 + 2, y);
+  y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 119, 110);
+  doc.text(role, margin, y);
+  y += 12;
+
+  // Table header
+  doc.setFillColor(26, 26, 24);
+  doc.rect(margin, y, W - margin * 2, 7, 'F');
+  doc.setTextColor(245, 242, 235);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  const cols = [margin+2, margin+90, margin+115, margin+140, margin+168];
+  doc.text('#', cols[0], y + 4.5);
+  doc.text('Descripción', cols[0]+6, y + 4.5);
+  doc.text('Cant.', cols[1], y + 4.5);
+  doc.text('P. Unit.', cols[2], y + 4.5);
+  doc.text('Total', cols[3], y + 4.5);
+  y += 7;
+
+  // Table rows
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(26, 26, 24);
+  q.items?.forEach((item, i) => {
+    if (y > 240) { doc.addPage(); y = 20; }
+    const rowH = 8;
+    if (i % 2 === 0) { doc.setFillColor(237, 233, 223); doc.rect(margin, y, W - margin*2, rowH, 'F'); }
+    doc.setFontSize(8);
+    doc.text(String(i+1), cols[0], y + 5);
+    const desc = item.description.length > 45 ? item.description.substring(0,43) + '…' : item.description;
+    doc.text(desc, cols[0]+6, y + 5);
+    doc.text(`${item.qty} ${item.unit || ''}`, cols[1], y + 5);
+    doc.text(`$${item.unitPrice?.toFixed(2)}`, cols[2], y + 5);
+    doc.text(`$${item.total?.toFixed(2)}`, cols[3], y + 5);
+    y += rowH;
+  });
+
+  y += 4;
+  if (q.discount) {
+    doc.setFontSize(9);
+    doc.setTextColor(120, 119, 110);
+    doc.text(`Descuento: ${q.discount}%`, W - margin, y, { align: 'right' });
+    y += 6;
+  }
+
+  // Grand total
+  doc.setFillColor(26, 26, 24);
+  doc.rect(margin + 100, y, W - margin*2 - 100, 9, 'F');
+  doc.setTextColor(245, 242, 235);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`TOTAL: $${(q.grandTotal || 0).toFixed(2)} USD`, W - margin - 2, y + 6, { align: 'right' });
+  y += 14;
+
+  // Terms
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 119, 110);
+  doc.text(`Plazo de entrega: ${q.deliveryDays ? q.deliveryDays + ' días hábiles' : 'A convenir'}`, margin, y);
+  y += 5;
+  doc.text(`Condiciones de pago: ${q.paymentTerms || 'A convenir'}`, margin, y);
+  if (q.notes) { y += 5; doc.text(`Notas: ${q.notes}`, margin, y); }
+  y += 20;
+
+  // Signatures
+  doc.setDrawColor(26, 26, 24);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, margin + 70, y);
+  doc.line(W/2 + 2, y, W/2 + 72, y);
+  y += 5;
+  doc.setFontSize(9);
+  doc.setTextColor(26, 26, 24);
+  doc.setFont('helvetica', 'bold');
+  doc.text(company, margin, y);
+  doc.text(q.supplier, W/2 + 2, y);
+  y += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 119, 110);
+  doc.text(role, margin, y);
+  doc.text('Firma de aceptación', W/2 + 2, y);
+
+  doc.save(`OC-${q.supplier.replace(/\s+/g,'-')}-${poNum}.pdf`);
+  toast('PDF descargado ✓');
+}
+
+// ──────────────────────────────────────────────
+// SETUP GUIDE
+// ──────────────────────────────────────────────
+function showSetupGuide() {
+  document.getElementById('setup-guide-content').innerHTML = `
+    <h3 style="font-family:var(--serif);font-size:18px;font-weight:400;margin-bottom:16px;">1. Obtener Google Client ID (OAuth)</h3>
+    <ol style="padding-left:20px;line-height:2;">
+      <li>Ve a <a href="https://console.cloud.google.com" target="_blank" style="color:var(--accent2);">console.cloud.google.com</a></li>
+      <li>Crea un proyecto nuevo (botón "Nuevo proyecto" arriba a la izquierda)</li>
+      <li>Ve a <strong>APIs y servicios → Biblioteca</strong> y activa:<br>
+        · <em>Gmail API</em><br>
+        · <em>Google Sheets API</em></li>
+      <li>Ve a <strong>APIs y servicios → Credenciales → Crear credenciales → ID de cliente OAuth 2.0</strong></li>
+      <li>Tipo de aplicación: <strong>Aplicación web</strong></li>
+      <li>En "Orígenes de JavaScript autorizados" agrega: <code style="background:var(--cream);padding:2px 6px;">${window.location.origin}</code></li>
+      <li>En "URIs de redireccionamiento autorizados" agrega la misma URL</li>
+      <li>Copia el <strong>ID de cliente</strong> y pégalo en la configuración de arriba</li>
+    </ol>
+
+    <h3 style="font-family:var(--serif);font-size:18px;font-weight:400;margin:24px 0 16px;">2. Obtener Anthropic API Key</h3>
+    <ol style="padding-left:20px;line-height:2;">
+      <li>Ve a <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent2);">console.anthropic.com</a></li>
+      <li>Crea una cuenta o inicia sesión</li>
+      <li>Ve a <strong>API Keys → Create Key</strong></li>
+      <li>Copia la clave (empieza con <code style="background:var(--cream);padding:2px 6px;">sk-ant-</code>) y pégala en configuración</li>
+    </ol>
+
+    <h3 style="font-family:var(--serif);font-size:18px;font-weight:400;margin:24px 0 16px;">3. Crear Google Sheet para exportar</h3>
+    <ol style="padding-left:20px;line-height:2;">
+      <li>Ve a <a href="https://sheets.google.com" target="_blank" style="color:var(--accent2);">sheets.google.com</a> y crea una hoja nueva</li>
+      <li>En la URL verás algo como: <code style="background:var(--cream);padding:2px 6px;">https://docs.google.com/spreadsheets/d/<strong>ID_AQUÍ</strong>/edit</code></li>
+      <li>Copia ese ID y pégalo en el campo "Google Sheet ID" de la configuración</li>
+    </ol>
+
+    <div style="background:var(--cream);padding:16px;margin-top:24px;font-size:12px;line-height:1.8;border-left:3px solid var(--accent);">
+      <strong>Nota de seguridad:</strong> Esta app corre 100% en tu navegador. Tus credenciales nunca se envían a ningún servidor externo más que las APIs oficiales de Google y Anthropic.
+    </div>
+  `;
+  document.getElementById('setup-modal').style.display = 'block';
+}
+</script>
+</body>
+</html>
